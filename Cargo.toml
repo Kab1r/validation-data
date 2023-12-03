@@ -1,0 +1,22 @@
+[package]
+name = "validation-data"
+description = "An HTTP server that provides a fruit corp's login validation data"
+repository = "https://github.com/Kab1r/validation-data"
+homepage = "https://validation-data.fly.dev"
+authors = ["Kabir Kwatra <kabir@kwatra.me>"]
+version = "1.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.7", features = ["tokio", "tracing"] }
+base64 = "0.21"
+clap = { version = "4.4", features = ["env", "derive"] }
+log = "0.4"
+pretty_env_logger = "0.5"
+pyo3 = { version = "0.20", features = ["auto-initialize", "anyhow"] }
+pyo3-asyncio = { version = "0.20", features = ["tokio-runtime", "attributes"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+reqwest = { version = "0.11", features = ["blocking"] }

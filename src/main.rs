@@ -128,7 +128,7 @@ async fn serve_validation_data(
     headers.insert(
         "Expires",
         expires
-            .to_rfc3339()
+            .to_rfc2822()
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );

@@ -1,5 +1,6 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{future::IntoFuture, net::SocketAddr, sync::Arc};
 
+use anyhow::{anyhow, Result};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -87,12 +88,17 @@ async fn main() -> PyResult<()> {
         )
         .with_state(cache);
     info!("Starting server...");
-    serve(listener, app).await?;
+    let server = serve(listener, app).into_future();
     select! {
         _ = data_generator => {}
         _ = cache_invalidator => {}
+        Err(e) = server => error!("Server error: {}", e),
+        _ = tokio::signal::ctrl_c() => {
+            info!("Shutting down...");
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(anyhow!("Server exited unexpectedly").into())
 }
 
 const IMD_APPLE_SERVICES: &[u8] = include_bytes!("IMDAppleServices");
@@ -136,7 +142,7 @@ async fn serve_validation_data(
     Ok((headers, data))
 }
 
-async fn generate_validation_data() -> anyhow::Result<(Instant, Box<str>)> {
+async fn generate_validation_data() -> Result<(Instant, Box<str>)> {
     let expiry = Instant::now() + FIFTEEN_MINUTES;
     let data = Python::with_gil(|py| -> PyResult<_> {
         let nac = PyModule::import(py, "nac")?;

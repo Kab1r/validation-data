@@ -123,9 +123,11 @@ fn initialize_python() -> PyResult<()> {
 async fn serve_validation_data(
     State(cache): State<Arc<SkipMap<Instant, Box<str>>>>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let entry = cache.pop_back().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let (expiry, data) = {
+        let entry = cache.pop_back().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        (entry.key().clone(), entry.value().clone())
+    };
     info!("Serving data, cache size: {}", cache.len());
-    let expiry = entry.key();
     if expiry.elapsed() != Duration::ZERO {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -138,7 +140,6 @@ async fn serve_validation_data(
             .parse()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     );
-    let data = entry.value().clone();
     Ok((headers, data))
 }
 

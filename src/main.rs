@@ -44,35 +44,30 @@ async fn main() -> PyResult<()> {
     initialize_python()?;
 
     let cache = Arc::new(SkipMap::new());
+    let (gen_cache, inv_cache) = (cache.clone(), cache.clone());
     let (exp_sender, expr_reciever) = delay_queue::<Instant>();
-    let generator_cache = cache.clone();
     let data_generator = spawn(async move {
-        let cache = generator_cache;
         loop {
-            if cache.len() >= cache_size {
-                yield_now().await;
+            yield_now().await;
+            if gen_cache.len() >= cache_size {
                 continue;
             }
             let Ok((expiry, data)) = generate_validation_data().await else {
                 continue;
             };
-            cache.insert(expiry, data);
+            gen_cache.insert(expiry, data);
             exp_sender.insert(expiry, expiry.duration_since(Instant::now()) - ONE_MINUTE);
             info!("Generated new data, cache size: {}", cache.len());
-            yield_now().await;
         }
     });
-    let invalidator_cache = cache.clone();
     let cache_invalidator = spawn(async move {
-        let cache = invalidator_cache;
         loop {
-            select! {
-                Some(expiry) = expr_reciever.receive() => {
-                    cache.remove(&expiry);
-                }
-            }
-            info!("Evicted expired data, cache size: {}", cache.len());
             yield_now().await;
+            let Some(expiry) = expr_reciever.receive().await else {
+                warn!("Failed to receive expiry, cache size: {}", inv_cache.len());
+                continue;
+            };
+            inv_cache.remove(&expiry);
         }
     });
 

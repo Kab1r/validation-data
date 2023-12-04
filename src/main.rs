@@ -28,8 +28,10 @@ use tokio::{
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
+    /// The address to bind to
     #[arg(long, env = "BIND_ADDR", default_value = "[::]:8080")]
     addr: SocketAddr,
+    /// The number of entries to cache
     #[arg(long, env = "CACHE_SIZE", default_value = "128")]
     cache_size: usize,
 }

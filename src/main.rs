@@ -13,7 +13,7 @@ use chrono::Utc;
 use clap::{command, Parser};
 use crossbeam_skiplist::SkipMap;
 use futures_delay_queue::delay_queue;
-use log::info;
+use log::{error, info, warn};
 use pyo3::{
     types::{PyBytes, PyModule},
     PyResult, Python,
@@ -53,11 +53,12 @@ async fn main() -> PyResult<()> {
                 continue;
             }
             let Ok((expiry, data)) = generate_validation_data().await else {
+                warn!("Failed to generate data, cache size: {}", gen_cache.len());
                 continue;
             };
             gen_cache.insert(expiry, data);
             exp_sender.insert(expiry, expiry.duration_since(Instant::now()) - ONE_MINUTE);
-            info!("Generated new data, cache size: {}", cache.len());
+            info!("Generated new data, cache size: {}", gen_cache.len());
         }
     });
     let cache_invalidator = spawn(async move {
@@ -68,6 +69,7 @@ async fn main() -> PyResult<()> {
                 continue;
             };
             inv_cache.remove(&expiry);
+            info!("Evicted expired data, cache size: {}", inv_cache.len());
         }
     });
 
@@ -120,6 +122,7 @@ async fn serve_validation_data(
     State(cache): State<Arc<SkipMap<Instant, Box<str>>>>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let entry = cache.pop_back().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    info!("Serving data, cache size: {}", cache.len());
     let expiry = entry.key();
     if expiry.elapsed() != Duration::ZERO {
         return Err(StatusCode::SERVICE_UNAVAILABLE);

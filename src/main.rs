@@ -48,7 +48,7 @@ async fn main() -> PyResult<()> {
     let cache = Arc::new(SkipMap::new());
     let (gen_cache, inv_cache) = (cache.clone(), cache.clone());
     let (exp_sender, expr_reciever) = delay_queue::<Instant>();
-    let data_generator = spawn(async move {
+    let cache_producer = spawn(async move {
         loop {
             yield_now().await;
             if gen_cache.len() >= cache_size {
@@ -89,7 +89,7 @@ async fn main() -> PyResult<()> {
     info!("Starting server...");
     let server = serve(listener, app).into_future();
     select! {
-        _ = data_generator => {}
+        _ = cache_producer => {}
         _ = cache_invalidator => {}
         Err(e) = server => error!("Server error: {}", e),
         _ = tokio::signal::ctrl_c() => {

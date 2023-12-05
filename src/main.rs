@@ -20,7 +20,9 @@ use pyo3::{
 };
 use tokio::{
     net::TcpListener,
-    select, spawn,
+    select,
+    signal::unix::SignalKind,
+    spawn,
     task::yield_now,
     time::{Duration, Instant},
 };
@@ -88,12 +90,17 @@ async fn main() -> PyResult<()> {
         .with_state(cache);
     info!("Starting server...");
     let server = serve(listener, app).into_future();
+    let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())?;
     select! {
         _ = cache_producer => {}
         _ = cache_invalidator => {}
         Err(e) = server => error!("Server error: {}", e),
         _ = tokio::signal::ctrl_c() => {
             info!("Shutting down...");
+            return Ok(());
+        }
+        _ = sigterm.recv() => {
+            info!("Received SIGTERM, shutting down...");
             return Ok(());
         }
     }

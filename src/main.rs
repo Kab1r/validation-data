@@ -60,7 +60,8 @@ async fn main() -> PyResult<()> {
     let cache_producer = spawn(async move {
         loop {
             yield_now().await;
-            if gen_cache.len() >= cache_size {
+            while gen_cache.len() >= cache_size {
+                yield_now().await;
                 gen_cache_is_not_full.notified().await;
             }
             let Ok((expiry, data)) = generate_validation_data().await else {

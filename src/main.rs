@@ -13,7 +13,7 @@ use chrono::Utc;
 use clap::{command, Parser};
 use crossbeam_skiplist::SkipMap;
 use futures_delay_queue::delay_queue;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use pyo3::{
     types::{PyBytes, PyModule},
     PyResult, Python,
@@ -23,6 +23,7 @@ use tokio::{
     select,
     signal::unix::SignalKind,
     spawn,
+    sync::Notify,
     task::yield_now,
     time::{Duration, Instant},
 };
@@ -48,13 +49,19 @@ async fn main() -> PyResult<()> {
     initialize_python()?;
 
     let cache = Arc::new(SkipMap::new());
-    let (gen_cache, inv_cache) = (cache.clone(), cache.clone());
+    let cache_is_not_full = Arc::new(Notify::new());
+    let (gen_cache, gen_cache_is_not_full, inv_cache, inv_cache_is_not_full) = (
+        cache.clone(),
+        cache_is_not_full.clone(),
+        cache.clone(),
+        cache_is_not_full.clone(),
+    );
     let (exp_sender, expr_reciever) = delay_queue::<Instant>();
     let cache_producer = spawn(async move {
         loop {
             yield_now().await;
             if gen_cache.len() >= cache_size {
-                continue;
+                gen_cache_is_not_full.notified().await;
             }
             let Ok((expiry, data)) = generate_validation_data().await else {
                 warn!("Failed to generate data, cache size: {}", gen_cache.len());
@@ -72,8 +79,13 @@ async fn main() -> PyResult<()> {
                 warn!("Failed to receive expiry, cache size: {}", inv_cache.len());
                 continue;
             };
-            inv_cache.remove(&expiry);
-            info!("Evicted expired data, cache size: {}", inv_cache.len());
+            match inv_cache.remove(&expiry) {
+                Some(_) => {
+                    inv_cache_is_not_full.notify_one();
+                    info!("Removed expired data, cache size: {}", inv_cache.len());
+                }
+                None => debug!("Expired data not found, cache size: {}", inv_cache.len()),
+            }
         }
     });
 
@@ -87,7 +99,7 @@ async fn main() -> PyResult<()> {
             "/version",
             get(|| async { format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")) }),
         )
-        .with_state(cache);
+        .with_state((cache, cache_is_not_full));
     info!("Starting server...");
     let server = serve(listener, app).into_future();
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())?;
@@ -128,10 +140,11 @@ fn initialize_python() -> PyResult<()> {
 }
 
 async fn serve_validation_data(
-    State(cache): State<Arc<SkipMap<Instant, Box<str>>>>,
+    State((cache, cache_is_not_full)): State<(Arc<SkipMap<Instant, Box<str>>>, Arc<Notify>)>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let (expiry, data) = {
         let entry = cache.pop_back().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        cache_is_not_full.notify_one();
         (entry.key().clone(), entry.value().clone())
     };
     info!("Serving data, cache size: {}", cache.len());

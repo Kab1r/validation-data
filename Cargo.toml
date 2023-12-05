@@ -11,16 +11,16 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-axum = { version = "0.7", features = ["tokio", "tracing"] }
+axum = { version = "0.7", features = ["tokio", "tracing", "http2"] }
 base64 = "0.21"
+chrono = "0.4"
 clap = { version = "4.4", features = ["env", "derive"] }
+crossbeam-skiplist = "0.1"
 log = "0.4"
 pretty_env_logger = "0.5"
 pyo3 = { version = "0.20", features = ["auto-initialize", "anyhow"] }
 pyo3-asyncio = { version = "0.20", features = ["tokio-runtime", "attributes"] }
 reqwest = { version = "0.11", features = ["blocking"] }
-chrono = "0.4"
-crossbeam-skiplist = "0.1"
 
 [dependencies.tokio]
 version = "1.0"
